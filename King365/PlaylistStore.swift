@@ -115,6 +115,8 @@ final class PlaylistStore: ObservableObject {
         if let data = try? JSONEncoder().encode(watchlist) {
             defaults.set(data, forKey: ProfileStore.key("watchlist"))
         }
+        defaults.set(Date().timeIntervalSince1970 * 1000, forKey: watchlistStampKey)
+        if !SyncService.password.isEmpty { Task { await syncNow() } }
     }
 
     // MARK: - Plusieurs abonnements
@@ -170,15 +172,22 @@ final class PlaylistStore: ObservableObject {
 
     @Published var syncStatus = ""
 
-    /// Récupère les abonnements de l'autre appareil, les ajoute, puis publie la liste complète
+    private var watchlistStampKey: String { ProfileStore.key("watchlistStamp") }
+
+    /// Récupère les abonnements et « Ma liste » de l'autre appareil, puis publie l'état complet
     func syncNow() async {
         let p = SyncService.password
         guard !p.isEmpty else { syncStatus = "Aucun mot de passe de synchronisation"; return }
         syncStatus = "Synchronisation…"
         do {
             var added = 0
+            var stamp = Int64(defaults.double(forKey: watchlistStampKey))
+            if stamp == 0 && !watchlist.isEmpty {
+                stamp = Int64(Date().timeIntervalSince1970 * 1000)
+                defaults.set(Double(stamp), forKey: watchlistStampKey)
+            }
             if let remote = try await SyncService.fetch(p) {
-                for r in remote {
+                for r in remote.subs {
                     let exists = subscriptions.contains {
                         $0.typeRaw == r.mode && (r.mode == "m3u" ? $0.m3uURL == r.m3u : ($0.server == r.server && $0.username == r.user))
                     }
@@ -189,12 +198,29 @@ final class PlaylistStore: ObservableObject {
                     added += 1
                 }
                 if added > 0 { saveSubscriptions() }
+                // « Ma liste » : la version la plus récente remplace l'autre
+                if remote.lt > stamp {
+                    watchlist = remote.list.map {
+                        WatchItem(id: "\($0.k)-\($0.id)", kind: WatchItem.Kind(rawValue: $0.k) ?? .movie, itemID: $0.id,
+                                  name: $0.n, image: $0.i.flatMap { URL(string: $0) }, rating: $0.r.map { String($0) },
+                                  ext: $0.e, categoryID: $0.c, year: $0.y)
+                    }
+                    if let data = try? JSONEncoder().encode(watchlist) {
+                        defaults.set(data, forKey: ProfileStore.key("watchlist"))
+                    }
+                    stamp = remote.lt
+                    defaults.set(Double(stamp), forKey: watchlistStampKey)
+                }
             }
             let items = subscriptions.map {
                 SyncService.Item(name: $0.name, mode: $0.typeRaw, server: $0.server, user: $0.username,
                                  pass: Keychain.get("xtreamPassword.\($0.id)"), m3u: $0.m3uURL)
             }
-            try await SyncService.push(p, items)
+            let list = watchlist.map {
+                SyncService.ListItem(k: $0.kind.rawValue, id: $0.itemID, n: $0.name, i: $0.image?.absoluteString,
+                                     r: Double($0.rating ?? ""), e: $0.ext, c: $0.categoryID, y: $0.year)
+            }
+            try await SyncService.push(p, SyncService.State(subs: items, list: list, lt: stamp))
             syncStatus = added > 0 ? "Synchronisé ✓ · \(added) abonnement(s) reçu(s)" : "Synchronisé ✓"
         } catch {
             syncStatus = "Échec de la synchronisation"

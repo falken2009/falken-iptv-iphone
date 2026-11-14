@@ -17,6 +17,24 @@ enum SyncService {
         var m3u: String
     }
 
+    struct ListItem: Codable {
+        var k: String
+        var id: String
+        var n: String
+        var i: String?
+        var r: Double?
+        var e: String?
+        var c: String?
+        var y: Int?
+    }
+
+    /// Tout ce qui est synchronisé : abonnements, « Ma liste » et la date de son dernier changement
+    struct State: Codable {
+        var subs: [Item]
+        var list: [ListItem]
+        var lt: Int64
+    }
+
     private static let base = "https://falken-iptv-default-rtdb.europe-west1.firebasedatabase.app"
     private static let salt = "falken-iptv-sync"
 
@@ -49,18 +67,20 @@ enum SyncService {
     }
 
     /// Abonnements publiés par l'autre appareil (nil si rien n'a encore été publié)
-    static func fetch(_ p: String) async throws -> [Item]? {
+    static func fetch(_ p: String) async throws -> State? {
         let (data, response) = try await URLSession.shared.data(from: url(p))
         guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
         guard let json = try JSONSerialization.jsonObject(with: data, options: [.fragmentsAllowed]) as? [String: Any],
               let b64 = json["d"] as? String, let combined = Data(base64Encoded: b64) else { return nil }
         let box = try AES.GCM.SealedBox(combined: combined)
         let plain = try AES.GCM.open(box, using: key(p))
-        return try JSONDecoder().decode([Item].self, from: plain)
+        if let state = try? JSONDecoder().decode(State.self, from: plain) { return state }
+        // Ancien format : seulement la liste des abonnements
+        return State(subs: try JSONDecoder().decode([Item].self, from: plain), list: [], lt: 0)
     }
 
-    static func push(_ p: String, _ items: [Item]) async throws {
-        let plain = try JSONEncoder().encode(items)
+    static func push(_ p: String, _ state: State) async throws {
+        let plain = try JSONEncoder().encode(state)
         let sealed = try AES.GCM.seal(plain, using: key(p))
         guard let combined = sealed.combined else { throw URLError(.cannotParseResponse) }
         let body: [String: Any] = ["d": combined.base64EncodedString(), "t": Int(Date().timeIntervalSince1970 * 1000)]
