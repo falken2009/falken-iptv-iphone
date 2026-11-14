@@ -1,0 +1,46 @@
+name: Build IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Choisir la dernière version d'Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Générer le projet Xcode
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Compiler l'application
+        run: |
+          xcodebuild \
+            -project King365.xcodeproj \
+            -scheme King365 \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build
+
+      - name: Créer le fichier IPA
+        run: |
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/King365.app Payload/
+          zip -qr King365.ipa Payload
+
+      - name: Mettre l'IPA à disposition
+        uses: actions/upload-artifact@v4
+        with:
+          name: King365-ipa
+          path: King365.ipa
