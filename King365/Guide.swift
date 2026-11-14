@@ -333,6 +333,40 @@ struct WatchlistView: View {
     @EnvironmentObject var store: PlaylistStore
     private let columns = [GridItem(.adaptive(minimum: 105), spacing: 12)]
 
+    @ViewBuilder
+    private func section(_ title: String, _ items: [WatchItem]) -> some View {
+        if !items.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("\(title) (\(items.count))").font(.headline)
+                LazyVGrid(columns: columns, spacing: 16) {
+                    ForEach(items) { item in card(item) }
+                }
+            }
+        }
+    }
+
+    private func card(_ item: WatchItem) -> some View {
+        NavigationLink {
+            switch item.kind {
+            case .movie: MovieDetailView(movie: item.movie)
+            case .series: SeriesDetailView(series: item.series)
+            }
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                PosterImage(url: item.image)
+                Text(item.name).font(.caption).lineLimit(2)
+            }
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button(role: .destructive) {
+                store.toggleWatchlist(item)
+            } label: {
+                Label("Retirer de ma liste", systemImage: "bookmark.slash")
+            }
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -344,33 +378,10 @@ struct WatchlistView: View {
                     )
                 } else {
                     ScrollView {
-                        LazyVGrid(columns: columns, spacing: 16) {
-                            ForEach(store.watchlist) { item in
-                                NavigationLink {
-                                    switch item.kind {
-                                    case .movie: MovieDetailView(movie: item.movie)
-                                    case .series: SeriesDetailView(series: item.series)
-                                    }
-                                } label: {
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        PosterImage(url: item.image)
-                                        HStack(spacing: 4) {
-                                            Image(systemName: item.kind == .movie ? "film" : "rectangle.stack")
-                                                .font(.caption2)
-                                                .foregroundStyle(Color.kingRed)
-                                            Text(item.name).font(.caption).lineLimit(2)
-                                        }
-                                    }
-                                }
-                                .buttonStyle(.plain)
-                                .contextMenu {
-                                    Button(role: .destructive) {
-                                        store.toggleWatchlist(item)
-                                    } label: {
-                                        Label("Retirer de ma liste", systemImage: "bookmark.slash")
-                                    }
-                                }
-                            }
+                        // Films et séries séparés, chacun sous son titre
+                        VStack(alignment: .leading, spacing: 22) {
+                            section("Films", store.watchlist.filter { $0.kind == .movie })
+                            section("Séries", store.watchlist.filter { $0.kind == .series })
                         }
                         .padding()
                     }
