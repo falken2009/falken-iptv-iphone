@@ -23,6 +23,7 @@ struct King365App: App {
                 .environmentObject(profiles)
                 .environmentObject(reminders)
                 .preferredColorScheme(.dark)
+                .task { if !SyncService.password.isEmpty { await store.syncNow() } }
                 // Abonnement envoyé depuis la Fire TV (QR code scanné avec l'appareil photo)
                 .onOpenURL { url in
                     Task { await store.importTransfer(url) }

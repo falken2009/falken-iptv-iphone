@@ -157,11 +157,47 @@ final class PlaylistStore: ObservableObject {
         subscriptions.append(sub)
         if sourceType == .xtream { Keychain.set(password, for: "xtreamPassword.\(sub.id)") }
         saveSubscriptions()
+        if !SyncService.password.isEmpty { Task { await syncNow() } }
     }
 
     private func saveSubscriptions() {
         if let data = try? JSONEncoder().encode(subscriptions) {
             defaults.set(data, forKey: "subscriptions")
+        }
+    }
+
+    // MARK: - Synchronisation avec la Fire TV
+
+    @Published var syncStatus = ""
+
+    /// Récupère les abonnements de l'autre appareil, les ajoute, puis publie la liste complète
+    func syncNow() async {
+        let p = SyncService.password
+        guard !p.isEmpty else { syncStatus = "Aucun mot de passe de synchronisation"; return }
+        syncStatus = "Synchronisation…"
+        do {
+            var added = 0
+            if let remote = try await SyncService.fetch(p) {
+                for r in remote {
+                    let exists = subscriptions.contains {
+                        $0.typeRaw == r.mode && (r.mode == "m3u" ? $0.m3uURL == r.m3u : ($0.server == r.server && $0.username == r.user))
+                    }
+                    if exists { continue }
+                    let sub = Subscription(id: UUID().uuidString, name: r.name, typeRaw: r.mode, server: r.server, username: r.user, m3uURL: r.m3u)
+                    subscriptions.append(sub)
+                    Keychain.set(r.pass, for: "xtreamPassword.\(sub.id)")
+                    added += 1
+                }
+                if added > 0 { saveSubscriptions() }
+            }
+            let items = subscriptions.map {
+                SyncService.Item(name: $0.name, mode: $0.typeRaw, server: $0.server, user: $0.username,
+                                 pass: Keychain.get("xtreamPassword.\($0.id)"), m3u: $0.m3uURL)
+            }
+            try await SyncService.push(p, items)
+            syncStatus = added > 0 ? "Synchronisé ✓ · \(added) abonnement(s) reçu(s)" : "Synchronisé ✓"
+        } catch {
+            syncStatus = "Échec de la synchronisation"
         }
     }
 

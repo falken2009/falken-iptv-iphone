@@ -397,6 +397,7 @@ struct SettingsView: View {
 
                 ConnectionSettingsSection()
                 TmdbSettingsSection()
+                SyncSettingsSection()
                 SubscriptionsSettingsSection()
                 ProfilesSettingsSection()
                 ThemeSettingsSection()
