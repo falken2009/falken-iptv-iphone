@@ -88,6 +88,7 @@ struct CatchUpView: View {
     @State private var loadingProgrammes = false
     @State private var day = Calendar.current.startOfDay(for: .now)
     @State private var playing: PlayItem?
+    @Environment(\.horizontalSizeClass) private var sizeClass
 
     private var channels: [LiveStream] {
         let withArchive = streams.filter { stream in
@@ -102,14 +103,23 @@ struct CatchUpView: View {
                 if store.xtream == nil {
                     XtreamRequiredView(kind: "Replay")
                 } else {
-                    HStack(spacing: 0) {
-                        channelList
-                            .frame(width: 280)
-                        Rectangle()
-                            .fill(.white.opacity(0.15))
-                            .frame(width: 1)
-                            .ignoresSafeArea()
-                        programmePane
+                    if sizeClass == .compact {
+                        // iPhone : une seule colonne à la fois, sinon les jours n'ont plus de place
+                        if selected == nil {
+                            channelList
+                        } else {
+                            programmePane
+                        }
+                    } else {
+                        HStack(spacing: 0) {
+                            channelList
+                                .frame(width: 280)
+                            Rectangle()
+                                .fill(.white.opacity(0.15))
+                                .frame(width: 1)
+                                .ignoresSafeArea()
+                            programmePane
+                        }
                     }
                 }
             }
@@ -117,7 +127,15 @@ struct CatchUpView: View {
             .navigationTitle(selected?.name ?? "Replay")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $search, prompt: "Rechercher une chaîne")
-            .toolbar { ToolbarItem(placement: .topBarLeading) { HomeButton() } }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if sizeClass == .compact, selected != nil {
+                        Button { selected = nil } label: { Label("Chaînes", systemImage: "chevron.left") }
+                    } else {
+                        HomeButton()
+                    }
+                }
+            }
             .task { await loadStreams() }
             .task(id: selected?.id) { await loadProgrammes() }
             .fullScreenCover(item: $playing) { item in
