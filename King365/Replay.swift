@@ -128,6 +128,18 @@ struct CatchUpView: View {
             .navigationBarTitleDisplayMode(.inline)
             .searchable(text: $search, prompt: "Rechercher une chaîne")
             .toolbar {
+                // Deuxième moyen de choisir le jour : un menu en haut à droite
+                ToolbarItem(placement: .topBarTrailing) {
+                    if let stream = selected {
+                        Menu {
+                            ForEach(days(for: stream), id: \.self) { d in
+                                Button(dayLabel(d)) { day = d }
+                            }
+                        } label: {
+                            Label(dayLabel(day), systemImage: "calendar")
+                        }
+                    }
+                }
                 ToolbarItem(placement: .topBarLeading) {
                     if sizeClass == .compact, selected != nil {
                         Button { selected = nil } label: { Label("Chaînes", systemImage: "chevron.left") }
@@ -196,17 +208,17 @@ struct CatchUpView: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(days(for: stream), id: \.self) { d in
-                            Button {
-                                day = d
-                            } label: {
-                                Text(dayLabel(d))
-                                    .font(.subheadline.weight(.semibold))
-                                    .padding(.horizontal, 14)
-                                    .padding(.vertical, 7)
-                                    .background(d == day ? Color.kingRed : Color.black.opacity(0.4), in: Capsule())
-                                    .overlay(Capsule().stroke(.white.opacity(d == day ? 0.9 : 0.25), lineWidth: 1))
-                                    .foregroundStyle(.white)
-                            }
+                            // Zone de toucher explicite : le simple Button ne répondait pas sur certains iPhone
+                            Text(dayLabel(d))
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 10)
+                                .background(d == day ? Color.kingRed : Color.black.opacity(0.4), in: Capsule())
+                                .overlay(Capsule().stroke(.white.opacity(d == day ? 0.9 : 0.25), lineWidth: 1))
+                                .foregroundStyle(.white)
+                                .contentShape(Capsule())
+                                .onTapGesture { day = d }
+                                .accessibilityAddTraits(.isButton)
                         }
                     }
                     .padding(.horizontal)
