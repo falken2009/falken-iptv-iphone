@@ -145,7 +145,7 @@ struct GuideGridView: View {
                     ContentUnavailableView(
                         "Guide vide",
                         systemImage: "calendar",
-                        description: Text("Mets à jour le guide des programmes dans Réglages.")
+                        description: Text("Touche ↻ en haut à droite pour charger le guide.")
                     )
                 } else {
                     GeometryReader { geo in
@@ -170,7 +170,21 @@ struct GuideGridView: View {
             .background(KingBackground(dimmed: true))
             .navigationTitle("Guide")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .topBarLeading) { HomeButton() } }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) { HomeButton() }
+                ToolbarItem(placement: .topBarTrailing) {
+                    if epg.isLoading {
+                        ProgressView()
+                    } else {
+                        Button {
+                            Task { await epg.reload(store: store) }
+                        } label: {
+                            Label("Recharger le guide", systemImage: "arrow.clockwise")
+                        }
+                    }
+                }
+            }
+            .task { await epg.refreshIfNeeded(store: store) }
             .confirmationDialog(
                 selection?.programme.title ?? "",
                 isPresented: Binding(get: { selection != nil }, set: { if !$0 { selection = nil } }),
